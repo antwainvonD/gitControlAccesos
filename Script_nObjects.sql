@@ -87,7 +87,7 @@ IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombr
   INSERT TablaStD VALUES ('wControlAcceso', 'wTimeOut', '5')  
 GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wEmpresa')
-  INSERT TablaStD VALUES ('wControlAcceso', 'wEmpresa', 'ABACD')
+  INSERT TablaStD VALUES ('wControlAcceso', 'wEmpresa', 'CGP')
   GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wPuerta')
   INSERT TablaStD VALUES ('wControlAcceso', 'wPuerta', '1')
@@ -134,6 +134,7 @@ AS BEGIN
       AND u.GrupoTrabajo = 'Control Accesos' -- cabmbiar este grupo o criterio
 END
 GO
+--EXEC dbo.MobileAcceso_CteDependientes @Cliente='100000-1',@Empresa='CGP ',@Puerta=1
 /*********** dbo.MobileAcceso_CteDependientes ***********/
 IF OBJECT_ID('dbo.MobileAcceso_CteDependientes', 'P') IS NOT NULL DROP PROCEDURE dbo.MobileAcceso_CteDependientes
 GO
@@ -164,12 +165,13 @@ AS BEGIN
   SELECT RTRIM(c.Cliente)+'-'+CONVERT(VARCHAR, c.ID)    AS Clave,
          c.Nombre                                       AS Nombre,
          ISNULL(c.Grupo, 'NA')                          AS Relacion,
-         RTRIM(@Ruta)+RTRIM(@Cliente)+'.png'            AS Foto
+         RTRIM(@Ruta)+RTRIM(c.Cliente)+'-'+CONVERT(VARCHAR, c.ID)+'.png'            AS Foto
     FROM CteEnviarA c
    WHERE c.Cliente = @Cte
      --AND CASE WHEN @Caracter > 0 THEN c.ID ELSE 1 END = CASE WHEN @Caracter > 0 THEN @Dep ELSE 1 END
 END
 GO
+--EXEC dbo.MobileAcceso_CteInvitados @Cliente='100000-1',@Empresa='CGP ',@Puerta=1
 /*********** dbo.MobileAcceso_CteInvitados ***********/
 IF OBJECT_ID('dbo.MobileAcceso_CteInvitados', 'P') IS NOT NULL DROP PROCEDURE dbo.MobileAcceso_CteInvitados
 GO
@@ -200,7 +202,7 @@ AS BEGIN
    GROUP BY c.Cte, c.Cedula
 END
 GO
---EXEC dbo.MobileAcceso_CteData @Cliente='100000-1',@Empresa='UCCP ',@Puerta=1
+--EXEC dbo.MobileAcceso_CteData @Cliente='100000-1',@Empresa='CGP ',@Puerta=1
 /*********** dbo.MobileAcceso_CteData ***********/
 IF OBJECT_ID('dbo.MobileAcceso_CteData', 'P') IS NOT NULL DROP PROCEDURE dbo.MobileAcceso_CteData
 GO
