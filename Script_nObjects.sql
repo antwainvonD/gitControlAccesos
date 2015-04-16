@@ -83,6 +83,15 @@ GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wMaxInvitados')
   INSERT TablaStD VALUES ('wControlAcceso', 'wMaxInvitados', '3')
 GO
+IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wTimeOut')
+  INSERT TablaStD VALUES ('wControlAcceso', 'wTimeOut', '5')  
+GO
+IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wEmpresa')
+  INSERT TablaStD VALUES ('wControlAcceso', 'wEmpresa', 'ABACD')
+  GO
+IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wPuerta')
+  INSERT TablaStD VALUES ('wControlAcceso', 'wPuerta', '1')
+GO
 IF NOT EXISTS (SELECT * FROM GrupoTrabajo WHERE GrupoTrabajo = 'Control Accesos')
   INSERT GrupoTrabajo (GrupoTrabajo) VALUES ('Control Accesos')
 GO
@@ -116,7 +125,8 @@ CREATE PROCEDURE dbo.MobileAcceso_login
 AS BEGIN
 -- si este procedimiento regresa renglones el acceso sera denegado al sistema de accesos del club de golf
  	
-  SELECT TOP 1 u.Usuario, @Pass AS Pass
+  SELECT TOP 1 u.Usuario    AS Usuario,
+         @Pass              AS Pass
     FROM Usuario u
     WHERE u.Usuario = RTRIM(@Usuario)
  	  AND u.Estatus = 'ALTA'
@@ -143,6 +153,8 @@ AS BEGIN
   IF @Caracter > 0
     SELECT @Cte = SUBSTRING(@Cliente, 1, CHARINDEX('-', @Cliente, 1)-1),
            @Dep = SUBSTRING(@Cliente, CHARINDEX('-', @Cliente, 1)+1, LEN(@Cliente))
+  ELSE
+    SELECT @Cte = @Cliente, @Dep = 1
          
   SELECT @Ruta = Valor -- Ruta de las fotos
     FROM TablaStD
@@ -154,7 +166,7 @@ AS BEGIN
          ISNULL(c.Grupo, 'NA')                          AS Relacion,
          RTRIM(@Ruta)+RTRIM(@Cliente)+'.png'            AS Foto
     FROM CteEnviarA c
-   WHERE c.Cliente = CASE WHEN @Caracter > 0 THEN @Cte ELSE @Cliente END
+   WHERE c.Cliente = @Cte
      --AND CASE WHEN @Caracter > 0 THEN c.ID ELSE 1 END = CASE WHEN @Caracter > 0 THEN @Dep ELSE 1 END
 END
 GO
@@ -167,23 +179,22 @@ CREATE PROCEDURE dbo.MobileAcceso_CteInvitados
                 @Puerta         INT
 AS BEGIN
   DECLARE
-    @Cte        VARCHAR(20),
-    @Dep        INT,
-    @Ruta       VARCHAR(100),
+    @Cte    VARCHAR(20),
     @Caracter   INT
 
   SET @Caracter = CHARINDEX('-', @Cliente, 1)
 
   IF @Caracter > 0
-    SELECT @Cte = SUBSTRING(@Cliente, 1, CHARINDEX('-', @Cliente, 1)-1),
-           @Dep = SUBSTRING(@Cliente, CHARINDEX('-', @Cliente, 1)+1, LEN(@Cliente))
+    SELECT @Cte = SUBSTRING(@Cliente, 1, CHARINDEX('-', @Cliente, 1)-1)
+  ELSE
+    SELECT @Cte = @Cliente
 
   SELECT c.Cte                AS Clave,
 	     MAX(c.Invitado)      AS Nombre,
 	     c.Cedula             AS Cedula,
 	     COUNT(*)             AS Visitas
 	FROM MobileAcceso_Invitados c
-   WHERE c.Cte = CASE WHEN @Caracter > 0 THEN @Cte ELSE @Cliente END
+   WHERE c.Cte = @Cte
      AND MONTH(c.Fecha) = MONTH(GETDATE())
      AND YEAR(c.Fecha) = YEAR(GETDATE())
    GROUP BY c.Cte, c.Cedula
@@ -207,17 +218,20 @@ AS BEGIN
 	@Saldo          FLOAT,
 	@Foto           VARCHAR(255),
 	@VisibleSaldo   BIT,
-    @Mensaje        VARCHAR(255)
+    @Mensaje        VARCHAR(255),
+    @Estatus		VARCHAR(15)
 
   SET @Caracter = CHARINDEX('-', @Cliente, 1)
 
   IF @Caracter > 0
     SELECT @Cte = SUBSTRING(@Cliente, 1, CHARINDEX('-', @Cliente, 1)-1),
 	       @Dep = SUBSTRING(@Cliente, CHARINDEX('-', @Cliente, 1)+1, LEN(@Cliente))
+  ELSE
+    SELECT @Cte = @Cliente, @Dep = 1
 
   SELECT @Foto = RTRIM(Valor)+RTRIM(@Cliente)+'.png',
          @VisibleSaldo = 0,
-         @Saldo = -1000
+         @Saldo = 0
     FROM TablaStD
    WHERE TablaSt = 'wControlAcceso'
      AND Nombre = 'wRutaFotos'
@@ -225,7 +239,7 @@ AS BEGIN
   SELECT @Nombre = Nombre,
          @Fecha = ISNULL(FechaNacimiento, '01/01/1900')
     FROM CteEnviarA
-   WHERE Cliente = CASE WHEN @Caracter > 0 THEN @Cte ELSE @Cliente END
+   WHERE Cliente = @Cte
      AND CASE WHEN @Caracter > 0 THEN ID ELSE 1 END = CASE WHEN @Caracter > 0 THEN @Dep ELSE 1 END
 
   IF YEAR(@Fecha) > 1900
@@ -234,13 +248,15 @@ AS BEGIN
       SELECT @Fecha = dbo.fnFechaSinHora(GETDATE())
   END
 
-  SELECT @Mensaje = Mensaje
+  SELECT @Mensaje = ISNULL(Mensaje, ''),
+         @Estatus = ISNULL(NULLIF(Estatus, ''), 'SIN_ESTATUS')
     FROM Cte
    WHERE Cliente = CASE WHEN @Caracter > 0 THEN @Cte ELSE @Cliente END
 	
   SELECT @Cliente           AS Cliente,
 	     @Nombre            AS Nombre,
-	     ''                 AS Apellido,
+	     ''                 AS Apellido,	  
+	     @Estatus           AS Estatus,
 	     @Mensaje           AS Mensaje,
 	     @Fecha             AS FechaNacimiento,
 	     0                  AS Sexo,
@@ -304,17 +320,27 @@ GO
 IF OBJECT_ID('dbo.MobileAcceso_NuevoInvitado', 'P') IS NOT NULL DROP PROCEDURE dbo.MobileAcceso_NuevoInvitado
 GO
 -- falta logica de insert
-CREATE PROCEDURE dbo.MobileAcceso_NuevoInvitado(
-	@Cliente VARCHAR(20), 
-	@Invitado VARCHAR (100),
-	@Empresa CHAR(5), 
-	@Puerta INT,
-	@Cedula VARCHAR(50),
-	@Usuario CHAR (10)
-	)
-AS
-BEGIN
+CREATE PROCEDURE dbo.MobileAcceso_NuevoInvitado
+                @Cliente VARCHAR(20),
+                @Invitado VARCHAR (100),
+                @Empresa CHAR(5),
+                @Puerta INT,
+                @Cedula VARCHAR(50),
+                @Usuario CHAR (10)
+AS BEGIN
+  DECLARE
+    @Cte        VARCHAR(20),
+    @Dep        INT,
+    @Caracter   INT
 
+  SET @Caracter = CHARINDEX('-', @Cliente, 1)
+
+  IF @Caracter > 0
+    SELECT @Cte = SUBSTRING(@Cliente, 1, CHARINDEX('-', @Cliente, 1)-1),
+           @Dep = SUBSTRING(@Cliente, CHARINDEX('-', @Cliente, 1)+1, LEN(@Cliente))
+  ELSE
+    SELECT @Cte = @Cliente, @Dep = 1
+		
   SET @Cedula = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@Cedula, ';', ''), '.', ''), ',', ''), '-', ''), '_', ''), '\', '')
   SET @Cedula = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@Cedula, '!', ''), '@', ''), '@', ''), '#', ''), '·', ''), '$', '')
   SET @Cedula = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@Cedula, '%', ''), '&', ''), '/', ''), '(', ''), ')', ''), '=', '')
@@ -323,7 +349,7 @@ BEGIN
   SET @Cedula = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(@Cedula, '{', ''), '}', ''), 'ç', ''), '<', ''), '>', ''), 'º', '')
   SET @Cedula = REPLACE(REPLACE(@Cedula, 'ª', ''), '¬', '')
 
-  INSERT INTO MobileAcceso_Invitados (Fecha, Cte, Invitado, Empresa, Cedula, Usuario)
-  VALUES (GETDATE(), @Cliente, @Invitado, @Empresa, @Cedula, @Usuario) 
+  INSERT INTO MobileAcceso_Invitados (Fecha, Cte, CteEnviarA, Invitado, Empresa, Cedula, Usuario)
+  VALUES (GETDATE(), @Cte, @Dep , @Invitado, @Empresa, @Cedula, @Usuario) 
 END
 GO
