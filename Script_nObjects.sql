@@ -78,7 +78,7 @@ IF NOT EXISTS (SELECT * FROM TablaSt WHERE TablaSt = 'wControlAcceso')
   INSERT TablaSt VALUES ('wControlAcceso')
 GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wRutaFotos')
-  INSERT TablaStD VALUES ('wControlAcceso', 'wRutaFotos', 'Img\')
+  INSERT TablaStD VALUES ('wControlAcceso', 'wRutaFotos', 'V:\Documents\Proyectos\GolfMobAcceso\Img\')
 GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wMaxInvitados')
   INSERT TablaStD VALUES ('wControlAcceso', 'wMaxInvitados', '3')
