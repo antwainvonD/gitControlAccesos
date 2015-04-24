@@ -70,6 +70,23 @@ IF OBJECT_ID('dbo.MobileAcceso_Invitados', 'U') IS NULL -- DROP TABLE MobileAcce
 	Usuario		CHAR(10)
   )
 GO
+
+
+-- SELECT * FROM MobileAcceso_Movimientos
+/*********** dbo.MobileAcceso_Movimientos ***********/
+IF OBJECT_ID('dbo.MobileAcceso_Movimientos', 'U') IS NULL -- DROP TABLE dbo.MobileAcceso_Movimientos
+  CREATE TABLE dbo.MobileAcceso_Movimientos(
+    Fecha       DATETIME,
+    Cte         VARCHAR(20),
+    CteEnviarA  INT,
+    Invitado    VARCHAR(100),
+    Empresa     CHAR(5),
+	Cedula		VARCHAR(50),
+	Usuario		CHAR(10),
+	puerta      int
+  )
+GO
+
 /*
 * Datos
 */
@@ -309,12 +326,28 @@ GO
 -- falta logica de insert
 CREATE PROCEDURE MobileAcceso_NuevoRegistro
                 @Cliente        VARCHAR(20), 
+                @Cedula        VARCHAR(20), 
                 @Empresa        CHAR(5), 
+                @Usuario char(10),
                 @Puerta         INT
 AS BEGIN
-	SELECT 1                      AS Semaforo,
-	       67                     AS id,
-	       'Cualquier4 otro '     AS Mensaje
+	
+	INSERT INTO MobileAcceso_Movimientos (
+	  Fecha,
+    Cte,
+    CteEnviarA,
+    Invitado,
+    Empresa,
+	Cedula,
+	Usuario,
+	Puerta)
+	values (
+	getdate(), 
+	SUBSTRING(@Cliente, 1, CHARINDEX('-', @Cliente, 1)-1),
+	SUBSTRING(@Cliente, CHARINDEX('-', @Cliente, 1)+1, LEN(@Cliente)),
+	@cedula, @empresa, @Cedula, @usuario,@puerta)
+	
+
 END
 GO
 
