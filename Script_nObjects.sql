@@ -95,7 +95,10 @@ IF NOT EXISTS (SELECT * FROM TablaSt WHERE TablaSt = 'wControlAcceso')
   INSERT TablaSt VALUES ('wControlAcceso')
 GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wRutaFotos')
-  INSERT TablaStD VALUES ('wControlAcceso', 'wRutaFotos', 'V:\Documents\Proyectos\GolfMobAcceso\Img\')
+  INSERT TablaStD VALUES ('wControlAcceso', 'wRutaFotos', /*Ruta local del site donde se almacenan las imagenes*/'V:\Documents\Proyectos\GolfMobAcceso\Img\')
+GO
+IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wPuerta')
+  INSERT TablaStD VALUES ('wControlAcceso', 'wExtFotos', '.jpg')-- extensión de las imágenes que se utilizarán
 GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wMaxInvitados')
   INSERT TablaStD VALUES ('wControlAcceso', 'wMaxInvitados', '3')
@@ -164,6 +167,7 @@ AS BEGIN
     @Cte        VARCHAR(20),
     @Dep        INT,
     @Ruta       VARCHAR(100),
+    @Ext        VARCHAR(5),
     @Caracter   INT
 
   SET @Caracter = CHARINDEX('-', @Cliente, 1)
@@ -179,10 +183,15 @@ AS BEGIN
    WHERE TablaSt = 'wControlAcceso'
      AND Nombre = 'wRutaFotos'
 
+    SELECT @Ext = Valor -- Extensión de las fotos
+    FROM TablaStD
+   WHERE TablaSt = 'wControlAcceso'
+     AND Nombre = 'wExtFotos'
+
   SELECT RTRIM(c.Cliente)+'-'+CONVERT(VARCHAR, c.ID)    AS Clave,
          c.Nombre                                       AS Nombre,
          ISNULL(c.Grupo, 'NA')                          AS Relacion,
-         RTRIM(@Ruta)+RTRIM(c.Cliente)+'-'+CONVERT(VARCHAR, c.ID)+'.png'            AS Foto
+         RTRIM(@Ruta)+RTRIM(c.Cliente)+'-'+CONVERT(VARCHAR, c.ID)+RTRIM(@Ext)   AS Foto
     FROM CteEnviarA c
    WHERE c.Cliente = @Cte
      --AND CASE WHEN @Caracter > 0 THEN c.ID ELSE 1 END = CASE WHEN @Caracter > 0 THEN @Dep ELSE 1 END
@@ -236,6 +245,7 @@ AS BEGIN
     @Fecha          DATETIME,
 	@Saldo          FLOAT,
 	@Foto           VARCHAR(255),
+    @Ext            VARCHAR(5),
 	@VisibleSaldo   BIT,
     @Mensaje        VARCHAR(255),
     @Estatus		VARCHAR(15)
@@ -248,7 +258,12 @@ AS BEGIN
   ELSE
     SELECT @Cte = @Cliente, @Dep = 1
 
-  SELECT @Foto = RTRIM(Valor)+RTRIM(@Cliente)+'.png',
+  SELECT @Ext = Valor -- Extensión de las fotos
+    FROM TablaStD
+   WHERE TablaSt = 'wControlAcceso'
+     AND Nombre = 'wExtFotos'
+
+  SELECT @Foto = RTRIM(Valor)+RTRIM(@Cliente)+RTRIM(@Ext),
          @VisibleSaldo = 0,
          @Saldo = 0
     FROM TablaStD
@@ -326,27 +341,27 @@ GO
 -- falta logica de insert
 CREATE PROCEDURE MobileAcceso_NuevoRegistro
                 @Cliente        VARCHAR(20), 
-                @Cedula        VARCHAR(20), 
+                @Cedula         VARCHAR(20), 
                 @Empresa        CHAR(5), 
-                @Usuario char(10),
+                @Usuario        VARCHAR(10),
                 @Puerta         INT
 AS BEGIN
-	
-	INSERT INTO MobileAcceso_Movimientos (
-	  Fecha,
-    Cte,
-    CteEnviarA,
-    Invitado,
-    Empresa,
-	Cedula,
-	Usuario,
-	Puerta)
-	values (
-	getdate(), 
-	SUBSTRING(@Cliente, 1, CHARINDEX('-', @Cliente, 1)-1),
-	SUBSTRING(@Cliente, CHARINDEX('-', @Cliente, 1)+1, LEN(@Cliente)),
-	@cedula, @empresa, @Cedula, @usuario,@puerta)
-	
+  DECLARE
+    @Cte            VARCHAR(20),
+    @Dep            INT,
+    @Caracter       INT,
+    @Fecha          DATETIME
+
+  SELECT @Fecha = GETDATE(), @Caracter = CHARINDEX('-', @Cliente, 1)
+
+  IF @Caracter > 0
+    SELECT @Cte = SUBSTRING(@Cliente, 1, CHARINDEX('-', @Cliente, 1)-1),
+	       @Dep = SUBSTRING(@Cliente, CHARINDEX('-', @Cliente, 1)+1, LEN(@Cliente))
+  ELSE
+    SELECT @Cte = @Cliente, @Dep = 1
+
+  INSERT INTO MobileAcceso_Movimientos (Fecha, Cte, CteEnviarA, Invitado, Empresa, Cedula, Usuario, Puerta)
+  VALUES (@Fecha, @Cte, @Dep, @Cedula, @Empresa, @Cedula, @Usuario, @Puerta)
 
 END
 GO
