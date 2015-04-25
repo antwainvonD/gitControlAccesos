@@ -57,6 +57,7 @@ IF OBJECT_ID('dbo.TablaStD', 'U') IS NULL -- DROP TABLE TablaStD
     CONSTRAINT priTablaStD PRIMARY KEY CLUSTERED (TablaSt, Nombre)
   )
 GO
+
 -- SELECT * FROM MobileAcceso_Invitados
 /*********** dbo.MobileAcceso_Invitados ***********/
 IF OBJECT_ID('dbo.MobileAcceso_Invitados', 'U') IS NULL -- DROP TABLE MobileAcceso_Invitados
@@ -71,7 +72,6 @@ IF OBJECT_ID('dbo.MobileAcceso_Invitados', 'U') IS NULL -- DROP TABLE MobileAcce
   )
 GO
 
-
 -- SELECT * FROM MobileAcceso_Movimientos
 /*********** dbo.MobileAcceso_Movimientos ***********/
 IF OBJECT_ID('dbo.MobileAcceso_Movimientos', 'U') IS NULL -- DROP TABLE dbo.MobileAcceso_Movimientos
@@ -83,10 +83,46 @@ IF OBJECT_ID('dbo.MobileAcceso_Movimientos', 'U') IS NULL -- DROP TABLE dbo.Mobi
     Empresa     CHAR(5),
 	Cedula		VARCHAR(50),
 	Usuario		CHAR(10),
-	puerta      int
+	Puerta      int
   )
 GO
+/*
+* Índices
+*/
+IF NOT EXISTS (SELECT so.[object_id] FROM sys.objects so JOIN sys.indexes si ON so.[object_id] = si.[object_id]
+                WHERE so.[object_id] = OBJECT_ID('dbo.MobileAcceso_Movimientos', 'U') AND si.name = 'idx_Invitado_01')
+BEGIN
+  CREATE INDEX idx_Invitado_01 ON dbo.MobileAcceso_Movimientos (Cedula, Invitado, Fecha, CteEnviarA, Cte)
+END ELSE
+BEGIN
+  DROP INDEX dbo.MobileAcceso_Movimientos.idx_Invitado_01
+  CREATE INDEX idx_Invitado_01 ON dbo.MobileAcceso_Movimientos (Cedula, Invitado, Fecha, CteEnviarA, Cte)
+END
+GO
+/*
+* Vistas
+*/
+IF OBJECT_ID('dbo.vMobileAcceso_Invitados') IS NOT NULL DROP VIEW dbo.vMobileAcceso_Invitados
+GO
+CREATE VIEW dbo.vMobileAcceso_Invitados
+AS
+  SELECT c.Cte                  AS Cte,
+	     c.Invitado             AS Invitado,
+	     c.Cedula               AS Cedula,
+         c.Fecha                AS Fecha,
+	     1                      AS Visitas
+	FROM MobileAcceso_Movimientos c
+   WHERE c.Cedula <> ''
 
+  UNION ALL
+
+  SELECT c.Cte                  AS Cte,
+	     c.Invitado             AS Invitado,
+	     c.Cedula               AS Cedula,
+         c.Fecha                AS Fecha,
+	     0                      AS Visitas
+	FROM MobileAcceso_Invitados c
+GO
 /*
 * Datos
 */
@@ -97,7 +133,7 @@ GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wRutaFotos')
   INSERT TablaStD VALUES ('wControlAcceso', 'wRutaFotos', /*Ruta local del site donde se almacenan las imagenes*/'V:\Documents\Proyectos\GolfMobAcceso\Img\')
 GO
-IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wPuerta')
+IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wExtFotos')
   INSERT TablaStD VALUES ('wControlAcceso', 'wExtFotos', '.jpg')-- extensión de las imágenes que se utilizarán
 GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wMaxInvitados')
@@ -207,24 +243,27 @@ CREATE PROCEDURE dbo.MobileAcceso_CteInvitados
                 @Puerta         INT
 AS BEGIN
   DECLARE
-    @Cte    VARCHAR(20),
+    @Cte        VARCHAR(20),
+    @Dep        VARCHAR(20),
     @Caracter   INT
 
   SET @Caracter = CHARINDEX('-', @Cliente, 1)
 
   IF @Caracter > 0
-    SELECT @Cte = SUBSTRING(@Cliente, 1, CHARINDEX('-', @Cliente, 1)-1)
+    SELECT @Cte = SUBSTRING(@Cliente, 1, CHARINDEX('-', @Cliente, 1)-1),
+           @Dep = SUBSTRING(@Cliente, CHARINDEX('-', @Cliente, 1)+1, LEN(@Cliente))
   ELSE
     SELECT @Cte = @Cliente
 
-  SELECT c.Cte                AS Clave,
-	     MAX(c.Invitado)      AS Nombre,
-	     c.Cedula             AS Cedula,
-	     COUNT(*)             AS Visitas
-	FROM MobileAcceso_Invitados c
+  SELECT c.Cte                  AS Clave,
+	     MAX(c.Invitado)        AS Nombre,
+	     c.Cedula               AS Cedula,
+	     SUM(c.Visitas)        AS Visitas
+	FROM vMobileAcceso_Invitados c
    WHERE c.Cte = @Cte
      AND MONTH(c.Fecha) = MONTH(GETDATE())
      AND YEAR(c.Fecha) = YEAR(GETDATE())
+     AND c.Cedula <> ''
    GROUP BY c.Cte, c.Cedula
 END
 GO
@@ -335,6 +374,7 @@ AS BEGIN
 	     @Descripcion   AS Evento
 END
 GO
+--EXEC dbo.MobileAcceso_NuevoRegistro @Cedula='',@Cliente='100000-5',@Empresa='     ',@Usuario='master    ',@Puerta=1
 /*********** dbo.MobileAcceso_NuevoRegistro ***********/
 IF OBJECT_ID('dbo.MobileAcceso_NuevoRegistro', 'P') IS NOT NULL DROP PROCEDURE dbo.MobileAcceso_NuevoRegistro
 GO
@@ -342,7 +382,7 @@ GO
 CREATE PROCEDURE MobileAcceso_NuevoRegistro
                 @Cliente        VARCHAR(20), 
                 @Cedula         VARCHAR(20), 
-                @Empresa        CHAR(5), 
+                @Empresa        VARCHAR(5), 
                 @Usuario        VARCHAR(10),
                 @Puerta         INT
 AS BEGIN
@@ -350,9 +390,10 @@ AS BEGIN
     @Cte            VARCHAR(20),
     @Dep            INT,
     @Caracter       INT,
-    @Fecha          DATETIME
+    @Fecha          DATETIME,
+    @Invitado       VARCHAR(100)
 
-  SELECT @Fecha = GETDATE(), @Caracter = CHARINDEX('-', @Cliente, 1)
+  SELECT @Fecha = GETDATE(), @Caracter = CHARINDEX('-', @Cliente, 1), @Invitado = ''
 
   IF @Caracter > 0
     SELECT @Cte = SUBSTRING(@Cliente, 1, CHARINDEX('-', @Cliente, 1)-1),
@@ -360,9 +401,15 @@ AS BEGIN
   ELSE
     SELECT @Cte = @Cliente, @Dep = 1
 
+  IF ISNULL(@Cedula, '') <> ''
+  BEGIN
+    SELECT TOP 1 @Invitado = Invitado FROM MobileAcceso_Invitados WHERE Cedula = @Cedula
+    DELETE MobileAcceso_Invitados WHERE Cedula = @Cedula
+  END
+  
   INSERT INTO MobileAcceso_Movimientos (Fecha, Cte, CteEnviarA, Invitado, Empresa, Cedula, Usuario, Puerta)
-  VALUES (@Fecha, @Cte, @Dep, @Cedula, @Empresa, @Cedula, @Usuario, @Puerta)
-
+  VALUES (@Fecha, @Cte, @Dep, @Invitado, @Empresa, @Cedula, @Usuario, @Puerta)
+  
 END
 GO
 
@@ -371,19 +418,20 @@ IF OBJECT_ID('dbo.MobileAcceso_NuevoInvitado', 'P') IS NOT NULL DROP PROCEDURE d
 GO
 -- falta logica de insert
 CREATE PROCEDURE dbo.MobileAcceso_NuevoInvitado
-                @Cliente VARCHAR(20),
-                @Invitado VARCHAR (100),
-                @Empresa CHAR(5),
-                @Puerta INT,
-                @Cedula VARCHAR(50),
-                @Usuario CHAR (10)
+                @Cliente    VARCHAR(20),
+                @Invitado   VARCHAR (100),
+                @Empresa    VARCHAR(5),
+                @Puerta     INT,
+                @Cedula     VARCHAR(50),
+                @Usuario    VARCHAR (10)
 AS BEGIN
   DECLARE
     @Cte        VARCHAR(20),
     @Dep        INT,
-    @Caracter   INT
+    @Caracter   INT,
+    @Fecha      DATETIME
 
-  SET @Caracter = CHARINDEX('-', @Cliente, 1)
+  SELECT @Fecha = GETDATE(), @Caracter = CHARINDEX('-', @Cliente, 1)
 
   IF @Caracter > 0
     SELECT @Cte = SUBSTRING(@Cliente, 1, CHARINDEX('-', @Cliente, 1)-1),
@@ -400,6 +448,6 @@ AS BEGIN
   SET @Cedula = REPLACE(REPLACE(@Cedula, 'ª', ''), '¬', '')
 
   INSERT INTO MobileAcceso_Invitados (Fecha, Cte, CteEnviarA, Invitado, Empresa, Cedula, Usuario)
-  VALUES (GETDATE(), @Cte, @Dep , @Invitado, @Empresa, @Cedula, @Usuario) 
+  VALUES (@Fecha, @Cte, @Dep , @Invitado, @Empresa, @Cedula, @Usuario)
 END
 GO
