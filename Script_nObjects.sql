@@ -139,9 +139,6 @@ GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wMaxInvitados')
   INSERT TablaStD VALUES ('wControlAcceso', 'wMaxInvitados', '3')
 GO
-IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wTimeOut')
-  INSERT TablaStD VALUES ('wControlAcceso', 'wTimeOut', '5')  
-GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wEmpresa')
   INSERT TablaStD VALUES ('wControlAcceso', 'wEmpresa', 'CGP')
   GO
@@ -190,6 +187,23 @@ AS BEGIN
       AND u.GrupoTrabajo = 'Control Accesos' -- cabmbiar este grupo o criterio
 END
 GO
+/*********** dbo.MobileAcceso_Parametros ***********/
+IF OBJECT_ID('dbo.MobileAcceso_Parametros', 'P') IS NOT NULL DROP PROCEDURE dbo.MobileAcceso_Parametros
+GO
+CREATE PROCEDURE dbo.MobileAcceso_Parametros
+AS BEGIN
+	DECLARE 
+		@Empresa CHAR(5),
+		@Puerta INT,
+		@maxinvitados int
+	SELECT @Empresa =   Valor FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wEmpresa'
+	SELECT @puerta =   convert (int, Valor) FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wPuerta'
+	SELECT @Maxinvitados =   convert(int, Valor) FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wMaxInvitados'
+	
+	SELECT @empresa as empresa, @puerta as puerta, @Maxinvitados as maxinvitados 
+END
+GO
+
 --EXEC dbo.MobileAcceso_CteDependientes @Cliente='100000-1',@Empresa='CGP ',@Puerta=1
 /*********** dbo.MobileAcceso_CteDependientes ***********/
 IF OBJECT_ID('dbo.MobileAcceso_CteDependientes', 'P') IS NOT NULL DROP PROCEDURE dbo.MobileAcceso_CteDependientes
@@ -254,7 +268,7 @@ AS BEGIN
            @Dep = SUBSTRING(@Cliente, CHARINDEX('-', @Cliente, 1)+1, LEN(@Cliente))
   ELSE
     SELECT @Cte = @Cliente
-
+ yo aca haria un uniion con la tabla real de movimientos para contar las ocurrencias de los invitados
   SELECT c.Cte                  AS Clave,
 	     MAX(c.Invitado)        AS Nombre,
 	     c.Cedula               AS Cedula,
@@ -361,18 +375,19 @@ IF OBJECT_ID('dbo.MobileAcceso_Registros', 'P') IS NOT NULL DROP PROCEDURE dbo.M
 GO
 CREATE PROCEDURE dbo.MobileAcceso_Registros
                 @Empresa        CHAR(5),
-                @Puerta         INT
+                @Puerta         INT,
+                @Usuario		VARCHAR(10)
 AS BEGIN
-  DECLARE
-    @Time            DATETIME,
-	@Descripcion     VARCHAR(200)
-	
-  SET @Time = GETDATE()
-  SET @Descripcion = 'Carga empleado'
 
-  SELECT @Time          AS Hora,
-	     @Descripcion   AS Evento
-END
+  SELECT TOP 10
+  Fecha AS Fecha, 
+  isnull(Cte,'') + ' (' + isnull(Cedula,'') + ')'   -- hacer una concatenacion evtando es null de los campos  --, CteEnviarA, Invitado, Empresa, Cedula, Usuario
+  AS Descripcion
+  FROM 
+	MobileAcceso_Movimientos mam 
+  -- WHERE @Usuario = mam.Usuario
+  ORDER BY fecha desc
+  END
 GO
 --EXEC dbo.MobileAcceso_NuevoRegistro @Cedula='',@Cliente='100000-5',@Empresa='     ',@Usuario='master    ',@Puerta=1
 /*********** dbo.MobileAcceso_NuevoRegistro ***********/
@@ -409,7 +424,9 @@ AS BEGIN
   
   INSERT INTO MobileAcceso_Movimientos (Fecha, Cte, CteEnviarA, Invitado, Empresa, Cedula, Usuario, Puerta)
   VALUES (@Fecha, @Cte, @Dep, @Invitado, @Empresa, @Cedula, @Usuario, @Puerta)
-  
+
+
+ aca borraria los datos de vMobileAcceso_Invitados WHERE cliente = @cliente   
 END
 GO
 
