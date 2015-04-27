@@ -268,7 +268,8 @@ AS BEGIN
            @Dep = SUBSTRING(@Cliente, CHARINDEX('-', @Cliente, 1)+1, LEN(@Cliente))
   ELSE
     SELECT @Cte = @Cliente
- yo aca haria un uniion con la tabla real de movimientos para contar las ocurrencias de los invitados
+ 
+  -- se accesa a la vista que contiene el UNION de la tabla Invitados y Movimientos
   SELECT c.Cte                  AS Clave,
 	     MAX(c.Invitado)        AS Nombre,
 	     c.Cedula               AS Cedula,
@@ -374,19 +375,18 @@ GO
 IF OBJECT_ID('dbo.MobileAcceso_Registros', 'P') IS NOT NULL DROP PROCEDURE dbo.MobileAcceso_Registros
 GO
 CREATE PROCEDURE dbo.MobileAcceso_Registros
-                @Empresa        CHAR(5),
+                @Empresa        VARCHAR(5),
                 @Puerta         INT,
                 @Usuario		VARCHAR(10)
 AS BEGIN
 
-  SELECT TOP 10
-  Fecha AS Fecha, 
-  isnull(Cte,'') + ' (' + isnull(Cedula,'') + ')'   -- hacer una concatenacion evtando es null de los campos  --, CteEnviarA, Invitado, Empresa, Cedula, Usuario
+  SELECT TOP 10 Fecha AS Fecha, 
+  ISNULL(Cte,'') + ' (' + ISNULL(Cedula,'') + ')'   -- hacer una concatenacion evitando es null de los campos
+                                                    -- , CteEnviarA, Invitado, Empresa, Cedula, Usuario
   AS Descripcion
-  FROM 
-	MobileAcceso_Movimientos mam 
+  FROM MobileAcceso_Movimientos
   -- WHERE @Usuario = mam.Usuario
-  ORDER BY fecha desc
+  ORDER BY Fecha DESC
   END
 GO
 --EXEC dbo.MobileAcceso_NuevoRegistro @Cedula='',@Cliente='100000-5',@Empresa='     ',@Usuario='master    ',@Puerta=1
@@ -408,7 +408,7 @@ AS BEGIN
     @Fecha          DATETIME,
     @Invitado       VARCHAR(100)
 
-  SELECT @Fecha = GETDATE(), @Caracter = CHARINDEX('-', @Cliente, 1), @Invitado = ''
+  SELECT @Fecha = GETDATE(), @Caracter = CHARINDEX('-', @Cliente, 1), @Invitado = '', @Cedula = RTRIM(@Cedula)
 
   IF @Caracter > 0
     SELECT @Cte = SUBSTRING(@Cliente, 1, CHARINDEX('-', @Cliente, 1)-1),
@@ -416,17 +416,27 @@ AS BEGIN
   ELSE
     SELECT @Cte = @Cliente, @Dep = 1
 
+  -- se extrae el nombre del invitado
   IF ISNULL(@Cedula, '') <> ''
   BEGIN
-    SELECT TOP 1 @Invitado = Invitado FROM MobileAcceso_Invitados WHERE Cedula = @Cedula
+    SELECT TOP 1 @Invitado = Invitado
+      FROM MobileAcceso_Invitados
+     WHERE Cedula = @Cedula
+       AND Invitado <> ''
+
+    IF @Invitado = ''
+      SELECT TOP 1 @Invitado = Invitado
+        FROM MobileAcceso_Movimientos
+       WHERE Cedula = @Cedula
+         AND Invitado <> ''
+
+    -- Se elimina el invitado "nuevo" que se ha escrito
     DELETE MobileAcceso_Invitados WHERE Cedula = @Cedula
   END
-  
+
   INSERT INTO MobileAcceso_Movimientos (Fecha, Cte, CteEnviarA, Invitado, Empresa, Cedula, Usuario, Puerta)
   VALUES (@Fecha, @Cte, @Dep, @Invitado, @Empresa, @Cedula, @Usuario, @Puerta)
 
-
- aca borraria los datos de vMobileAcceso_Invitados WHERE cliente = @cliente   
 END
 GO
 
