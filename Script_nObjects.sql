@@ -1,4 +1,10 @@
 /*
+* Instalar IIS
+* Verificar/Instalar/Descargar .NET Framework 4.5.1 (ASP.NET 4.5)
+* Crear web site en IIS (control-accesos)
+* Crear usuario en Intelisis para el control de accesos
+*/
+/*
 * Configuración DB
 */
 /*********** Nivel de compatibilidad a 90 ***********/
@@ -131,7 +137,8 @@ IF NOT EXISTS (SELECT * FROM TablaSt WHERE TablaSt = 'wControlAcceso')
   INSERT TablaSt VALUES ('wControlAcceso')
 GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wRutaFotos')
-  INSERT TablaStD VALUES ('wControlAcceso', 'wRutaFotos', /*Ruta local del site donde se almacenan las imagenes*/'V:\Documents\Proyectos\GolfMobAcceso\Img\')
+  INSERT TablaStD VALUES ('wControlAcceso', 'wRutaFotos',
+  /*Ruta local del site donde se almacenan las imagenes*/'V:\Documents\Proyectos\GolfMobAcceso\Img\')
 GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wExtFotos')
   INSERT TablaStD VALUES ('wControlAcceso', 'wExtFotos', '.jpg')-- extensión de las imágenes que se utilizarán
@@ -164,6 +171,17 @@ AS BEGIN
   RETURN (DATEADD(ms, -DATEPART(ms, @Fecha), DATEADD(ss, -DATEPART(ss, @Fecha), DATEADD(mi, -DATEPART(mi, @Fecha), DATEADD(hh, -DATEPART(hh, @Fecha), @Fecha)))))
 END
 GO
+--SELECT dbo.ufnPasswordOld('control')
+/**************** ufnPasswordOld ****************/
+IF EXISTS (SELECT name FROM sysobjects WHERE name = 'ufnPasswordOld' AND type = 'FN') DROP FUNCTION ufnPasswordOld
+GO
+CREATE FUNCTION ufnPasswordOld (@pwd VARCHAR(100))
+RETURNS VARCHAR(32)
+--//WITH ENCRYPTION
+AS BEGIN
+  RETURN (SUBSTRING(master.dbo.fn_varbintohexstr(HashBytes('MD5', @pwd)), 3, 32))
+END
+GO
 /*
 * Procedimientos almacenados
 */
@@ -183,8 +201,9 @@ AS BEGIN
     FROM Usuario u
     WHERE u.Usuario = RTRIM(@Usuario)
  	  AND u.Estatus = 'ALTA'
- 	  AND u.Contrasena = dbo.fnPassword(@Pass)
-      AND u.GrupoTrabajo = 'Control Accesos' -- cabmbiar este grupo o criterio
+      --AND u.Contrasena = dbo.ufnPasswordOld(@Pass)  -- versión vieja de encriptación
+ 	  AND u.Contrasena = dbo.fnPassword(@Pass)    -- versión nueva de encriptación (CLR)
+      AND u.GrupoTrabajo = 'Control Accesos'        -- cambiar este grupo o criterio en caso de ser necesario
 END
 GO
 /*********** dbo.MobileAcceso_Parametros ***********/
@@ -192,15 +211,18 @@ IF OBJECT_ID('dbo.MobileAcceso_Parametros', 'P') IS NOT NULL DROP PROCEDURE dbo.
 GO
 CREATE PROCEDURE dbo.MobileAcceso_Parametros
 AS BEGIN
-	DECLARE 
-		@Empresa CHAR(5),
-		@Puerta INT,
-		@maxinvitados int
-	SELECT @Empresa =   Valor FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wEmpresa'
-	SELECT @puerta =   convert (int, Valor) FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wPuerta'
-	SELECT @Maxinvitados =   convert(int, Valor) FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wMaxInvitados'
+  DECLARE 
+	@Empresa        VARCHAR(5),
+	@Puerta         INT,
+	@maxInvitados   INT
+
+  SELECT @Empresa       = Valor               FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wEmpresa'
+  SELECT @puerta        = CONVERT(int, Valor) FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wPuerta'
+  SELECT @Maxinvitados  = CONVERT(int, Valor) FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wMaxInvitados'
 	
-	SELECT @empresa as empresa, @puerta as puerta, @Maxinvitados as maxinvitados 
+  SELECT @Empresa           AS Empresa,
+         @Puerta            AS Puerta,
+         @Maxinvitados      AS maxInvitados 
 END
 GO
 
@@ -273,13 +295,17 @@ AS BEGIN
   SELECT c.Cte                  AS Clave,
 	     MAX(c.Invitado)        AS Nombre,
 	     c.Cedula               AS Cedula,
-	     SUM(c.Visitas)        AS Visitas
-	FROM vMobileAcceso_Invitados c
+         a.VisitasGlobales      AS Visitas -- se modifica la sumatoria de visitas, se hace global y se busca por cedula
+	     --SUM(c.Visitas)         AS Visitas
+	FROM vMobileAcceso_Invitados    c
+    JOIN (SELECT SUM(Visitas) AS VisitasGlobales, Cedula
+            FROM vMobileAcceso_Invitados
+           GROUP BY Cedula) AS      a       ON c.Cedula = a.Cedula
    WHERE c.Cte = @Cte
      AND MONTH(c.Fecha) = MONTH(GETDATE())
      AND YEAR(c.Fecha) = YEAR(GETDATE())
      AND c.Cedula <> ''
-   GROUP BY c.Cte, c.Cedula
+   GROUP BY c.Cte, c.Cedula, a.VisitasGlobales
 END
 GO
 --EXEC dbo.MobileAcceso_CteData @Cliente='100000-1',@Empresa='CGP ',@Puerta=1
@@ -371,6 +397,7 @@ AS BEGIN
 	     @Descripcion   AS Evento
 END
 GO
+--EXEC dbo.MobileAcceso_Registros @Empresa='CGP  ',@Puerta=1,@Usuario='master'
 /*********** dbo.MobileAcceso_Registros ***********/
 IF OBJECT_ID('dbo.MobileAcceso_Registros', 'P') IS NOT NULL DROP PROCEDURE dbo.MobileAcceso_Registros
 GO
@@ -380,13 +407,24 @@ CREATE PROCEDURE dbo.MobileAcceso_Registros
                 @Usuario		VARCHAR(10)
 AS BEGIN
 
-  SELECT TOP 10 Fecha AS Fecha, 
-  ISNULL(Cte,'') + ' (' + ISNULL(Cedula,'') + ')'   -- hacer una concatenacion evitando es null de los campos
-                                                    -- , CteEnviarA, Invitado, Empresa, Cedula, Usuario
+  SELECT TOP 10
+         m.Fecha AS Fecha, 
+  -- hacer una concatenacion evitando es null de los campos
+         '('+ CASE WHEN m.Cedula = ''
+                THEN RTRIM(RTRIM(m.Cte))+'-'+CONVERT(varchar, ISNULL(m.CteEnviarA, ''))
+                ELSE ISNULL(RTRIM(m.Cedula), '')
+              END+') '+--CHAR(13)+
+              CASE WHEN m.Cedula = ''
+                THEN RTRIM(c.Nombre)
+                ELSE ISNULL(RTRIM(m.Invitado), '')
+               END
   AS Descripcion
-  FROM MobileAcceso_Movimientos
+   --, CteEnviarA, Invitado, Empresa, Cedula, m.Usuario
+  FROM MobileAcceso_Movimientos m
+  JOIN CteEnviarA               c   ON m.Cte = c.Cliente AND m.CteEnviarA = c.ID
   -- WHERE @Usuario = mam.Usuario
   ORDER BY Fecha DESC
+
   END
 GO
 --EXEC dbo.MobileAcceso_NuevoRegistro @Cedula='',@Cliente='100000-5',@Empresa='     ',@Usuario='master    ',@Puerta=1
