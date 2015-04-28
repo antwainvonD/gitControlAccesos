@@ -86,11 +86,47 @@ IF OBJECT_ID('dbo.MobileAcceso_Movimientos', 'U') IS NULL -- DROP TABLE dbo.Mobi
     Cte         VARCHAR(20),
     CteEnviarA  INT,
     Invitado    VARCHAR(100),
-    Empresa     CHAR(5),
+    Empresa     VARCHAR(5),
 	Cedula		VARCHAR(50),
-	Usuario		CHAR(10),
-	Puerta      int
+	Usuario		VARCHAR(10),
+	Puerta      INT,
+    Area        VARCHAR(50),
+    Estatus     VARCHAR(15)
   )
+GO
+IF NOT EXISTS(SELECT so.[object_id] FROM sys.objects so JOIN sys.[columns] sc ON so.[object_id] = sc.[object_id]
+               WHERE so.[object_id] = OBJECT_ID('dbo.MobileAcceso_Movimientos', 'U') AND sc.name = 'Area')
+BEGIN
+  ALTER TABLE dbo.MobileAcceso_Movimientos ADD Area VARCHAR(50)
+END
+GO
+IF EXISTS(SELECT so.[object_id] FROM sys.objects so JOIN sys.[columns] sc ON so.[object_id] = sc.[object_id]
+           WHERE so.[object_id] = OBJECT_ID('dbo.MobileAcceso_Movimientos', 'U') AND sc.name = 'Area')
+BEGIN
+  UPDATE MobileAcceso_Movimientos
+     SET Area = 'CANCHA GOLF'
+
+  ALTER TABLE dbo.MobileAcceso_Movimientos ALTER COLUMN Area VARCHAR(50) NOT NULL
+END
+GO
+
+IF NOT EXISTS(SELECT so.[object_id] FROM sys.objects so JOIN sys.[columns] sc ON so.[object_id] = sc.[object_id]
+               WHERE so.[object_id] = OBJECT_ID('dbo.MobileAcceso_Movimientos', 'U') AND sc.name = 'Estatus')
+BEGIN
+  ALTER TABLE dbo.MobileAcceso_Movimientos ADD Estatus VARCHAR(15)
+END
+GO
+
+IF EXISTS(SELECT so.[object_id] FROM sys.objects so JOIN sys.[columns] sc ON so.[object_id] = sc.[object_id]
+          WHERE so.[object_id] = OBJECT_ID('dbo.MobileAcceso_Movimientos', 'U') AND sc.name = 'Estatus')
+BEGIN
+  UPDATE a
+     SET a.Estatus = c.Estatus
+    FROM MobileAcceso_Movimientos   a
+    JOIN Cte                        c   ON a.Cte = c.Cliente
+
+  ALTER TABLE dbo.MobileAcceso_Movimientos ALTER COLUMN Estatus VARCHAR(15)
+END
 GO
 /*
 * Índices
@@ -152,6 +188,10 @@ IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombr
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wPuerta')
   INSERT TablaStD VALUES ('wControlAcceso', 'wPuerta', '1')
 GO
+IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wPasswordType')
+  INSERT TablaStD VALUES ('wControlAcceso', 'wPasswordType', '2')
+  /*2 = nuevo, 1 = viejo (la compatibilidad 80 no es necesaria) */
+GO
 IF NOT EXISTS (SELECT * FROM GrupoTrabajo WHERE GrupoTrabajo = 'Control Accesos')
   INSERT GrupoTrabajo (GrupoTrabajo) VALUES ('Control Accesos')
 GO
@@ -175,7 +215,7 @@ GO
 /**************** ufnPasswordOld ****************/
 IF EXISTS (SELECT name FROM sysobjects WHERE name = 'ufnPasswordOld' AND type = 'FN') DROP FUNCTION ufnPasswordOld
 GO
-CREATE FUNCTION ufnPasswordOld (@pwd VARCHAR(100))
+CREATE FUNCTION ufnPasswordOld (@pwd VARCHAR(MAX))
 RETURNS VARCHAR(32)
 --//WITH ENCRYPTION
 AS BEGIN
@@ -194,15 +234,20 @@ CREATE PROCEDURE dbo.MobileAcceso_login
                 @Pass           VARCHAR(50),
                 @Puerta         INT
 AS BEGIN
--- si este procedimiento regresa renglones el acceso sera denegado al sistema de accesos del club de golf
- 	
+  DECLARE
+    @pwdType    INT
+
+  SELECT @pwdType = Valor FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wPasswordType'
+  -- si este procedimiento regresa renglones el acceso sera denegado al sistema de accesos del club de golf
   SELECT TOP 1 u.Usuario    AS Usuario,
          @Pass              AS Pass
     FROM Usuario u
     WHERE u.Usuario = RTRIM(@Usuario)
  	  AND u.Estatus = 'ALTA'
-      --AND u.Contrasena = dbo.ufnPasswordOld(@Pass)  -- versión vieja de encriptación
- 	  AND u.Contrasena = dbo.fnPassword(@Pass)    -- versión nueva de encriptación (CLR)
+ 	  AND u.Contrasena = CASE @pwdType
+                             WHEN 1 THEN dbo.ufnPasswordOld(@Pass)    -- versión vieja de encriptación
+                             WHEN 2 THEN dbo.fnPassword(@Pass)        -- versión nueva de encriptación (CLR)
+                         END
       AND u.GrupoTrabajo = 'Control Accesos'        -- cambiar este grupo o criterio en caso de ser necesario
 END
 GO
@@ -444,7 +489,8 @@ AS BEGIN
     @Dep            INT,
     @Caracter       INT,
     @Fecha          DATETIME,
-    @Invitado       VARCHAR(100)
+    @Invitado       VARCHAR(100),
+    @Estatus        VARCHAR(15)
 
   SELECT @Fecha = GETDATE(), @Caracter = CHARINDEX('-', @Cliente, 1), @Invitado = '', @Cedula = RTRIM(@Cedula)
 
@@ -453,6 +499,8 @@ AS BEGIN
 	       @Dep = SUBSTRING(@Cliente, CHARINDEX('-', @Cliente, 1)+1, LEN(@Cliente))
   ELSE
     SELECT @Cte = @Cliente, @Dep = 1
+  
+  SELECT @Estatus = ISNULL(NULLIF(Estatus, ''), 'SIN_ESTATUS') FROM Cte WHERE Cliente = @Cte
 
   -- se extrae el nombre del invitado
   IF ISNULL(@Cedula, '') <> ''
@@ -472,8 +520,8 @@ AS BEGIN
     DELETE MobileAcceso_Invitados WHERE Cedula = @Cedula
   END
 
-  INSERT INTO MobileAcceso_Movimientos (Fecha, Cte, CteEnviarA, Invitado, Empresa, Cedula, Usuario, Puerta)
-  VALUES (@Fecha, @Cte, @Dep, @Invitado, @Empresa, @Cedula, @Usuario, @Puerta)
+  INSERT INTO MobileAcceso_Movimientos (Fecha, Cte, CteEnviarA, Invitado, Empresa, Cedula, Usuario, Puerta, Area, Estatus)
+  VALUES (@Fecha, @Cte, @Dep, @Invitado, @Empresa, @Cedula, @Usuario, @Puerta, 'CANCHA GOLF', @Estatus)
 
 END
 GO
@@ -514,5 +562,22 @@ AS BEGIN
 
   INSERT INTO MobileAcceso_Invitados (Fecha, Cte, CteEnviarA, Invitado, Empresa, Cedula, Usuario)
   VALUES (@Fecha, @Cte, @Dep , @Invitado, @Empresa, @Cedula, @Usuario)
+END
+GO
+/*
+* re-Configuración DB
+*/
+/*********** Nivel de compatibilidad a 80 ***********/
+DECLARE
+  @dbname1  SYSNAME
+
+SET @dbname1 = DB_NAME()
+
+IF (SELECT CONVERT(INT, Valor) FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wPasswordType') = 1
+BEGIN
+  EXEC sp_dbcmptlevel @dbname1/*'CGP'*/, 80
+  EXEC sp_configure 'clr enabled', 0
+
+  RECONFIGURE
 END
 GO
