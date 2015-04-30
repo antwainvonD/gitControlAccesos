@@ -416,12 +416,25 @@ AS BEGIN
 	     @Nombre            AS Nombre,
 	     ''                 AS Apellido,	  
 	     @Estatus           AS Estatus,
+	     ''                 AS Parentesco, 
 	     @Mensaje           AS Mensaje,
 	     @Fecha             AS FechaNacimiento,
 	     0                  AS Sexo,
 	     @Saldo             AS Saldo,
 	     @Foto              AS Foto,
 	     @VisibleSaldo      AS VisibleSaldo
+END
+GO
+/*********** dbo.MobileAcceso_Areas ***********/
+IF OBJECT_ID('dbo.MobileAcceso_Areas', 'P') IS NOT NULL DROP PROCEDURE dbo.MobileAcceso_Areas
+GO
+CREATE PROCEDURE dbo.MobileAcceso_Areas
+             
+AS BEGIN
+--	SELECT Elemento AS Area FROM SoporteElemento
+SELECT DISTINCT GrupoTrabajo AS Area FROM GrupoTrabajo gt   --- poner la tabla correspondiente
+	
+  
 END
 GO
 /*********** dbo.MobileAcceso_Eventos ***********/
@@ -453,17 +466,23 @@ CREATE PROCEDURE dbo.MobileAcceso_Registros
 AS BEGIN
 
   SELECT TOP 10
-         m.Fecha AS Fecha, 
+         convert(varchar(50), m.Fecha, 101) AS Fecha, 
+         convert(varchar(50), m.Fecha, 108) AS Hora,
   -- hacer una concatenacion evitando es null de los campos
          '('+ CASE WHEN m.Cedula = ''
                 THEN RTRIM(RTRIM(m.Cte))+'-'+CONVERT(varchar, ISNULL(m.CteEnviarA, ''))
                 ELSE ISNULL(RTRIM(m.Cedula), '')
-              END+') '+--CHAR(13)+
+              END+') ' AS Clave,
               CASE WHEN m.Cedula = ''
                 THEN RTRIM(c.Nombre)
                 ELSE ISNULL(RTRIM(m.Invitado), '')
                END
-  AS Descripcion
+  AS Nombre,
+  Area, 
+  CASE WHEN m.Cedula = ''
+                THEN 'Invitado'
+                ELSE ''
+              END AS Tipo
    --, CteEnviarA, Invitado, Empresa, Cedula, m.Usuario
   FROM MobileAcceso_Movimientos m
   JOIN CteEnviarA               c   ON m.Cte = c.Cliente AND m.CteEnviarA = c.ID
@@ -482,7 +501,8 @@ CREATE PROCEDURE MobileAcceso_NuevoRegistro
                 @Cedula         VARCHAR(20), 
                 @Empresa        VARCHAR(5), 
                 @Usuario        VARCHAR(10),
-                @Puerta         INT
+                @Puerta         INT,
+                @Area			VARCHAR(50)
 AS BEGIN
   DECLARE
     @Cte            VARCHAR(20),
@@ -521,7 +541,7 @@ AS BEGIN
   END
 
   INSERT INTO MobileAcceso_Movimientos (Fecha, Cte, CteEnviarA, Invitado, Empresa, Cedula, Usuario, Puerta, Area, Estatus)
-  VALUES (@Fecha, @Cte, @Dep, @Invitado, @Empresa, @Cedula, @Usuario, @Puerta, 'CANCHA GOLF', @Estatus)
+  VALUES (@Fecha, @Cte, @Dep, @Invitado, @Empresa, @Cedula, @Usuario, @Puerta, @Area, @Estatus)
 
 END
 GO
