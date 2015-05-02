@@ -479,7 +479,7 @@ AS BEGIN
                END
   AS Nombre,
   Area, 
-  CASE WHEN m.Cedula = ''
+  CASE WHEN m.Cedula <> ''
                 THEN 'Invitado'
                 ELSE ''
               END AS Tipo
@@ -487,7 +487,7 @@ AS BEGIN
   FROM MobileAcceso_Movimientos m
   JOIN CteEnviarA               c   ON m.Cte = c.Cliente AND m.CteEnviarA = c.ID
   -- WHERE @Usuario = mam.Usuario
-  ORDER BY Fecha DESC
+  ORDER BY m.Fecha DESC
 
   END
 GO
