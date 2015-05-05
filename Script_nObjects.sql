@@ -179,7 +179,7 @@ IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombr
   /*Ruta local del site donde se almacenan las imagenes*/'C:\inetpub\wwwroot\CGP\pruebas\Img\')
 GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wExtFotos')
-  INSERT TablaStD VALUES ('wControlAcceso', 'wExtFotos', '.jpg')-- extensión de las imágenes que se utilizarán
+  INSERT TablaStD VALUES ('wControlAcceso', 'wExtFotos', '.bmp')-- extensión de las imágenes que se utilizarán
 GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wMaxInvitados')
   INSERT TablaStD VALUES ('wControlAcceso', 'wMaxInvitados', '3')
@@ -302,7 +302,7 @@ AS BEGIN
    WHERE TablaSt = 'wControlAcceso'
      AND Nombre = 'wRutaFotos'
 
-    SELECT @Ext = Valor -- Extensión de las fotos
+  SELECT @Ext = Valor -- Extensión de las fotos
     FROM TablaStD
    WHERE TablaSt = 'wControlAcceso'
      AND Nombre = 'wExtFotos'
@@ -339,15 +339,14 @@ AS BEGIN
     SELECT @Cte = @Cliente
  
   -- se accesa a la vista que contiene el UNION de la tabla Invitados y Movimientos
-  SELECT UPPER(c.Cte)                  AS Clave,
-	     UPPER(MAX(c.Invitado))        AS Nombre,
-	     UPPER(c.Cedula)               AS Cedula,
-         a.VisitasGlobales      AS Visitas -- se modifica la sumatoria de visitas, se hace global y se busca por cedula
-	     --SUM(c.Visitas)         AS Visitas
+  SELECT UPPER(c.Cte)                   AS Clave,
+	     UPPER(MAX(c.Invitado))         AS Nombre,
+	     UPPER(c.Cedula)                AS Cedula,
+         a.VisitasGlobales              AS Visitas -- se modifica la sumatoria de visitas, se hace global y se busca por cedula
 	FROM vMobileAcceso_Invitados    c
     JOIN (SELECT SUM(Visitas) AS VisitasGlobales, Cedula
             FROM vMobileAcceso_Invitados
-           GROUP BY Cedula) AS      a       ON c.Cedula = a.Cedula
+           GROUP BY Cedula)         AS a ON c.Cedula = a.Cedula
    WHERE c.Cte = @Cte
      AND MONTH(c.Fecha) = MONTH(GETDATE())
      AND YEAR(c.Fecha) = YEAR(GETDATE())
@@ -377,51 +376,54 @@ AS BEGIN
     @Mensaje        VARCHAR(255),
     @Estatus		VARCHAR(15),
 
-    @Parentesco     VARCHAR(50)
+    @TipoSocio      VARCHAR(50)
 
-  SET @Caracter = CHARINDEX('-', @Cliente, 1)
+  SELECT @Caracter = CHARINDEX('-', @Cliente, 1),  @VisibleSaldo = 0, @Saldo = 0
 
   IF @Caracter > 0
     SELECT @Cte = SUBSTRING(@Cliente, 1, CHARINDEX('-', @Cliente, 1)-1),
 	       @Dep = SUBSTRING(@Cliente, CHARINDEX('-', @Cliente, 1)+1, LEN(@Cliente))
   ELSE
-    SELECT @Cte = @Cliente, @Dep = 1
+    SELECT @Cte = @Cliente, @Dep = 1, @Cliente = RTRIM(@Cte)+'-'+CONVERT(VARCHAR, @Dep)
 
-  SELECT @Ext = Valor -- Extensión de las fotos
+  -- Extensión de las fotos
+  SELECT @Ext = Valor
     FROM TablaStD
    WHERE TablaSt = 'wControlAcceso'
      AND Nombre = 'wExtFotos'
 
-  SELECT @Foto = RTRIM(Valor)+RTRIM(@Cliente)+RTRIM(@Ext),
-         @VisibleSaldo = 0,
-         @Saldo = 0
+  -- Ruta de la foto con todo y extensión
+  SELECT @Foto = RTRIM(Valor)+RTRIM(@Cliente)+RTRIM(@Ext)
     FROM TablaStD
    WHERE TablaSt = 'wControlAcceso'
      AND Nombre = 'wRutaFotos'
 
+  -- Nombre, Fecha y Tipo de Socio de la Sucursal del Cliente
   SELECT @Nombre = 'Nombre: '+UPPER(Nombre),
          @Fecha = ISNULL(FechaNacimiento, '01/01/1900'),
-         @Parentesco = 'Tipo Socio: '+CASE WHEN UPPER(Grupo) = 'PRINCIPAL' THEN '' ELSE 'DEPENDIENTE - ' END+UPPER(Grupo)
+         @TipoSocio = 'Tipo Socio: '+CASE WHEN UPPER(Grupo) = 'PRINCIPAL' THEN '' ELSE 'DEPENDIENTE - ' END+UPPER(Grupo)
     FROM CteEnviarA
    WHERE Cliente = @Cte
-     AND CASE WHEN @Caracter > 0 THEN ID ELSE 1 END = CASE WHEN @Caracter > 0 THEN @Dep ELSE 1 END
+     AND ID = @Dep
 
+  -- Mensaje y Estatus del Cliente principal
+  SELECT @Mensaje = ISNULL(Mensaje, ''),
+         @Estatus = ISNULL(NULLIF(Estatus, ''), 'SIN_ESTATUS')
+    FROM Cte
+   WHERE Cliente = @Cte
+
+  -- Se verifica si es el cumpleaños del socio
   IF YEAR(@Fecha) > 1900
   BEGIN
     IF MONTH(@Fecha) = MONTH(GETDATE()) AND DAY(@Fecha) = DAY(GETDATE())
       SELECT @Fecha = dbo.fnFechaSinHora(GETDATE())
   END
-
-  SELECT @Mensaje = ISNULL(Mensaje, ''),
-         @Estatus = ISNULL(NULLIF(Estatus, ''), 'SIN_ESTATUS')
-    FROM Cte
-   WHERE Cliente = CASE WHEN @Caracter > 0 THEN @Cte ELSE @Cliente END
 	
   SELECT UPPER(@Cliente)            AS Cliente,
 	     @Nombre                    AS Nombre,
 	     ''                         AS Apellido,	  
 	     UPPER(@Estatus)            AS Estatus,
-	     @Parentesco                AS Parentesco, 
+	     @TipoSocio                 AS Parentesco, 
 	     UPPER(@Mensaje)            AS Mensaje,
 	     @Fecha                     AS FechaNacimiento,
 	     0                          AS Sexo,
@@ -472,7 +474,6 @@ AS BEGIN
          CONVERT(VARCHAR(50), m.Fecha, 101)             AS Fecha, 
          CONVERT(VARCHAR(50), m.Fecha, 108)             AS Hora,
   -- hacer una concatenacion evitando es null de los campos
-<<<<<<< HEAD
          UPPER(CASE WHEN m.Cedula = ''
               THEN RTRIM(RTRIM(m.Cte))+'-'+CONVERT(varchar, ISNULL(m.CteEnviarA, ''))
               ELSE ISNULL(RTRIM(m.Cedula), '')
@@ -490,31 +491,6 @@ AS BEGIN
   FROM MobileAcceso_Movimientos m
   JOIN CteEnviarA               c   ON m.Cte = c.Cliente AND m.CteEnviarA = c.ID
   ORDER BY Fecha DESC, Hora DESC
-=======
-         '('+ CASE WHEN m.Cedula = ''
-                THEN RTRIM(RTRIM(m.Cte))+'-'+CONVERT(varchar, ISNULL(m.CteEnviarA, ''))
-                ELSE ISNULL(RTRIM(m.Cedula), '')
-              END+') ' AS Clave,
-              CASE WHEN m.Cedula = ''
-                THEN RTRIM(c.Nombre)
-                ELSE ISNULL(RTRIM(m.Invitado), '')
-               END
-  AS Nombre,
-  Area, 
-  CASE WHEN m.Cedula <> ''
-                THEN 'Invitado'
-                ELSE ''
-              END AS Tipo
-   --, CteEnviarA, Invitado, Empresa, Cedula, m.Usuario
-  FROM MobileAcceso_Movimientos m
-  JOIN CteEnviarA               c   ON m.Cte = c.Cliente AND m.CteEnviarA = c.ID
-  -- WHERE @Usuario = mam.Usuario
-  ORDER BY m.Fecha DESC
-<<<<<<< Updated upstream
-=======
->>>>>>> origin/Panama
->>>>>>> Stashed changes
-
   END
 GO
 --EXEC dbo.MobileAcceso_NuevoRegistro @Cedula='',@Cliente='100000-5',@Empresa='     ',@Usuario='master    ',@Puerta=1
