@@ -105,6 +105,7 @@ IF EXISTS(SELECT so.[object_id] FROM sys.objects so JOIN sys.[columns] sc ON so.
 BEGIN
   UPDATE MobileAcceso_Movimientos
      SET Area = 'CANCHA GOLF'
+   WHERE Area IS NULL
 
   ALTER TABLE dbo.MobileAcceso_Movimientos ALTER COLUMN Area VARCHAR(50) NOT NULL
 END
@@ -124,6 +125,7 @@ BEGIN
      SET a.Estatus = c.Estatus
     FROM MobileAcceso_Movimientos   a
     JOIN Cte                        c   ON a.Cte = c.Cliente
+   WHERE a.Estatus IS NULL
 
   ALTER TABLE dbo.MobileAcceso_Movimientos ALTER COLUMN Estatus VARCHAR(15)
 END
@@ -174,7 +176,7 @@ IF NOT EXISTS (SELECT * FROM TablaSt WHERE TablaSt = 'wControlAcceso')
 GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wRutaFotos')
   INSERT TablaStD VALUES ('wControlAcceso', 'wRutaFotos',
-  /*Ruta local del site donde se almacenan las imagenes*/'V:\Documents\Proyectos\GolfMobAcceso\Img\')
+  /*Ruta local del site donde se almacenan las imagenes*/'C:\inetpub\wwwroot\CGP\pruebas\Img\')
 GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wExtFotos')
   INSERT TablaStD VALUES ('wControlAcceso', 'wExtFotos', '.jpg')-- extensión de las imágenes que se utilizarán
@@ -305,9 +307,9 @@ AS BEGIN
    WHERE TablaSt = 'wControlAcceso'
      AND Nombre = 'wExtFotos'
 
-  SELECT RTRIM(c.Cliente)+'-'+CONVERT(VARCHAR, c.ID)    AS Clave,
-         c.Nombre                                       AS Nombre,
-         ISNULL(c.Grupo, 'NA')                          AS Relacion,
+  SELECT UPPER(RTRIM(c.Cliente)+'-'+CONVERT(VARCHAR, c.ID))    AS Clave,
+         UPPER(c.Nombre)                                       AS Nombre,
+         UPPER(ISNULL(c.Grupo, 'NA'))                          AS Relacion,
          RTRIM(@Ruta)+RTRIM(c.Cliente)+'-'+CONVERT(VARCHAR, c.ID)+RTRIM(@Ext)   AS Foto
     FROM CteEnviarA c
    WHERE c.Cliente = @Cte
@@ -337,9 +339,9 @@ AS BEGIN
     SELECT @Cte = @Cliente
  
   -- se accesa a la vista que contiene el UNION de la tabla Invitados y Movimientos
-  SELECT c.Cte                  AS Clave,
-	     MAX(c.Invitado)        AS Nombre,
-	     c.Cedula               AS Cedula,
+  SELECT UPPER(c.Cte)                  AS Clave,
+	     UPPER(MAX(c.Invitado))        AS Nombre,
+	     UPPER(c.Cedula)               AS Cedula,
          a.VisitasGlobales      AS Visitas -- se modifica la sumatoria de visitas, se hace global y se busca por cedula
 	     --SUM(c.Visitas)         AS Visitas
 	FROM vMobileAcceso_Invitados    c
@@ -373,7 +375,9 @@ AS BEGIN
     @Ext            VARCHAR(5),
 	@VisibleSaldo   BIT,
     @Mensaje        VARCHAR(255),
-    @Estatus		VARCHAR(15)
+    @Estatus		VARCHAR(15),
+
+    @Parentesco     VARCHAR(50)
 
   SET @Caracter = CHARINDEX('-', @Cliente, 1)
 
@@ -395,8 +399,9 @@ AS BEGIN
    WHERE TablaSt = 'wControlAcceso'
      AND Nombre = 'wRutaFotos'
 
-  SELECT @Nombre = Nombre,
-         @Fecha = ISNULL(FechaNacimiento, '01/01/1900')
+  SELECT @Nombre = 'Nombre: '+UPPER(Nombre),
+         @Fecha = ISNULL(FechaNacimiento, '01/01/1900'),
+         @Parentesco = 'Tipo Socio: '+CASE WHEN UPPER(Grupo) = 'PRINCIPAL' THEN '' ELSE 'DEPENDIENTE - ' END+UPPER(Grupo)
     FROM CteEnviarA
    WHERE Cliente = @Cte
      AND CASE WHEN @Caracter > 0 THEN ID ELSE 1 END = CASE WHEN @Caracter > 0 THEN @Dep ELSE 1 END
@@ -412,29 +417,28 @@ AS BEGIN
     FROM Cte
    WHERE Cliente = CASE WHEN @Caracter > 0 THEN @Cte ELSE @Cliente END
 	
-  SELECT @Cliente           AS Cliente,
-	     @Nombre            AS Nombre,
-	     ''                 AS Apellido,	  
-	     @Estatus           AS Estatus,
-	     ''                 AS Parentesco, 
-	     @Mensaje           AS Mensaje,
-	     @Fecha             AS FechaNacimiento,
-	     0                  AS Sexo,
-	     @Saldo             AS Saldo,
-	     @Foto              AS Foto,
-	     @VisibleSaldo      AS VisibleSaldo
+  SELECT UPPER(@Cliente)            AS Cliente,
+	     @Nombre                    AS Nombre,
+	     ''                         AS Apellido,	  
+	     UPPER(@Estatus)            AS Estatus,
+	     @Parentesco                AS Parentesco, 
+	     UPPER(@Mensaje)            AS Mensaje,
+	     @Fecha                     AS FechaNacimiento,
+	     0                          AS Sexo,
+	     @Saldo                     AS Saldo,
+	     @Foto                      AS Foto,
+	     @VisibleSaldo              AS VisibleSaldo
 END
 GO
 /*********** dbo.MobileAcceso_Areas ***********/
 IF OBJECT_ID('dbo.MobileAcceso_Areas', 'P') IS NOT NULL DROP PROCEDURE dbo.MobileAcceso_Areas
 GO
 CREATE PROCEDURE dbo.MobileAcceso_Areas
-             
 AS BEGIN
---	SELECT Elemento AS Area FROM SoporteElemento
-SELECT DISTINCT GrupoTrabajo AS Area FROM GrupoTrabajo gt   --- poner la tabla correspondiente
-	
-  
+  SELECT 'SELECCIONAR AREA' AS Area
+  UNION ALL
+  SELECT DISTINCT Elemento
+    FROM SoporteElemento   -- colocar la tabla correspondiente en caso que se requiera modificar
 END
 GO
 /*********** dbo.MobileAcceso_Eventos ***********/
@@ -464,11 +468,29 @@ CREATE PROCEDURE dbo.MobileAcceso_Registros
                 @Puerta         INT,
                 @Usuario		VARCHAR(10)
 AS BEGIN
-
   SELECT TOP 10
-         convert(varchar(50), m.Fecha, 101) AS Fecha, 
-         convert(varchar(50), m.Fecha, 108) AS Hora,
+         CONVERT(VARCHAR(50), m.Fecha, 101)             AS Fecha, 
+         CONVERT(VARCHAR(50), m.Fecha, 108)             AS Hora,
   -- hacer una concatenacion evitando es null de los campos
+<<<<<<< HEAD
+         UPPER(CASE WHEN m.Cedula = ''
+              THEN RTRIM(RTRIM(m.Cte))+'-'+CONVERT(varchar, ISNULL(m.CteEnviarA, ''))
+              ELSE ISNULL(RTRIM(m.Cedula), '')
+         END)                                           AS Clave,
+         UPPER(CASE WHEN m.Cedula = ''
+              THEN RTRIM(c.Nombre)
+              ELSE ISNULL(RTRIM(m.Invitado), '')
+         END)                                           AS Nombre,
+         UPPER(Area)                                    AS Area,
+         CASE WHEN m.Cedula = ''
+              THEN ''
+              ELSE 'Invitado'
+         END                                            AS Tipo
+   --, CteEnviarA, Invitado, Empresa, Cedula, m.Usuario
+  FROM MobileAcceso_Movimientos m
+  JOIN CteEnviarA               c   ON m.Cte = c.Cliente AND m.CteEnviarA = c.ID
+  ORDER BY Fecha DESC, Hora DESC
+=======
          '('+ CASE WHEN m.Cedula = ''
                 THEN RTRIM(RTRIM(m.Cte))+'-'+CONVERT(varchar, ISNULL(m.CteEnviarA, ''))
                 ELSE ISNULL(RTRIM(m.Cedula), '')
@@ -488,6 +510,10 @@ AS BEGIN
   JOIN CteEnviarA               c   ON m.Cte = c.Cliente AND m.CteEnviarA = c.ID
   -- WHERE @Usuario = mam.Usuario
   ORDER BY m.Fecha DESC
+<<<<<<< Updated upstream
+=======
+>>>>>>> origin/Panama
+>>>>>>> Stashed changes
 
   END
 GO
@@ -541,7 +567,7 @@ AS BEGIN
   END
 
   INSERT INTO MobileAcceso_Movimientos (Fecha, Cte, CteEnviarA, Invitado, Empresa, Cedula, Usuario, Puerta, Area, Estatus)
-  VALUES (@Fecha, @Cte, @Dep, @Invitado, @Empresa, @Cedula, @Usuario, @Puerta, @Area, @Estatus)
+  VALUES (@Fecha, @Cte, @Dep, UPPER(@Invitado), @Empresa, UPPER(@Cedula), UPPER(@Usuario), @Puerta, UPPER(@Area), UPPER(@Estatus))
 
 END
 GO
@@ -581,7 +607,7 @@ AS BEGIN
   SET @Cedula = REPLACE(REPLACE(@Cedula, 'ª', ''), '¬', '')
 
   INSERT INTO MobileAcceso_Invitados (Fecha, Cte, CteEnviarA, Invitado, Empresa, Cedula, Usuario)
-  VALUES (@Fecha, @Cte, @Dep , @Invitado, @Empresa, @Cedula, @Usuario)
+  VALUES (@Fecha, @Cte, @Dep , UPPER(@Invitado), @Empresa, UPPER(@Cedula), UPPER(@Usuario))
 END
 GO
 /*
