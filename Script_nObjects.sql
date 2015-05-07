@@ -227,6 +227,7 @@ GO
 /*
 * Procedimientos almacenados
 */
+--EXEC dbo.MobileAcceso_login @Usuario='master',@Pass='DEMO',@Empresa='CGP  ',@Puerta=1
 /*********** dbo.MobileAcceso_login ***********/
 IF OBJECT_ID('dbo.MobileAcceso_login', 'P') IS NOT NULL DROP PROCEDURE dbo.MobileAcceso_login
 GO
@@ -253,6 +254,7 @@ AS BEGIN
       AND u.GrupoTrabajo = 'Control Accesos'        -- cambiar este grupo o criterio en caso de ser necesario
 END
 GO
+--EXEC dbo.MobileAcceso_Parametros 
 /*********** dbo.MobileAcceso_Parametros ***********/
 IF OBJECT_ID('dbo.MobileAcceso_Parametros', 'P') IS NOT NULL DROP PROCEDURE dbo.MobileAcceso_Parametros
 GO
@@ -432,6 +434,7 @@ AS BEGIN
 	     @VisibleSaldo              AS VisibleSaldo
 END
 GO
+--EXEC dbo.MobileAcceso_Areas 
 /*********** dbo.MobileAcceso_Areas ***********/
 IF OBJECT_ID('dbo.MobileAcceso_Areas', 'P') IS NOT NULL DROP PROCEDURE dbo.MobileAcceso_Areas
 GO
@@ -439,7 +442,7 @@ CREATE PROCEDURE dbo.MobileAcceso_Areas
 AS BEGIN
   SELECT 'SELECCIONAR AREA' AS Area
   UNION ALL
-  SELECT DISTINCT Elemento
+  SELECT DISTINCT UPPER(Elemento)
     FROM SoporteElemento   -- colocar la tabla correspondiente en caso que se requiera modificar
 END
 GO
@@ -586,20 +589,3 @@ AS BEGIN
   VALUES (@Fecha, @Cte, @Dep , UPPER(@Invitado), @Empresa, UPPER(@Cedula), UPPER(@Usuario))
 END
 GO
-/*
-* re-Configuración DB
-*/
---/*********** Nivel de compatibilidad a 80 ***********/
---DECLARE
---  @dbname1  SYSNAME
-
---SET @dbname1 = DB_NAME()
-
---IF (SELECT CONVERT(INT, Valor) FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wPasswordType') = 1
---BEGIN
---  EXEC sp_dbcmptlevel @dbname1/*'CGP'*/, 80
---  EXEC sp_configure 'clr enabled', 0
-
---  RECONFIGURE
---END
---GO
