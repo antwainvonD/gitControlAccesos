@@ -94,42 +94,6 @@ IF OBJECT_ID('dbo.MobileAcceso_Movimientos', 'U') IS NULL -- DROP TABLE dbo.Mobi
     Estatus     VARCHAR(15)
   )
 GO
-IF NOT EXISTS(SELECT so.[object_id] FROM sys.objects so JOIN sys.[columns] sc ON so.[object_id] = sc.[object_id]
-               WHERE so.[object_id] = OBJECT_ID('dbo.MobileAcceso_Movimientos', 'U') AND sc.name = 'Area')
-BEGIN
-  ALTER TABLE dbo.MobileAcceso_Movimientos ADD Area VARCHAR(50)
-END
-GO
-IF EXISTS(SELECT so.[object_id] FROM sys.objects so JOIN sys.[columns] sc ON so.[object_id] = sc.[object_id]
-           WHERE so.[object_id] = OBJECT_ID('dbo.MobileAcceso_Movimientos', 'U') AND sc.name = 'Area')
-BEGIN
-  UPDATE MobileAcceso_Movimientos
-     SET Area = 'CANCHA GOLF'
-   WHERE Area IS NULL
-
-  ALTER TABLE dbo.MobileAcceso_Movimientos ALTER COLUMN Area VARCHAR(50) NOT NULL
-END
-GO
-
-IF NOT EXISTS(SELECT so.[object_id] FROM sys.objects so JOIN sys.[columns] sc ON so.[object_id] = sc.[object_id]
-               WHERE so.[object_id] = OBJECT_ID('dbo.MobileAcceso_Movimientos', 'U') AND sc.name = 'Estatus')
-BEGIN
-  ALTER TABLE dbo.MobileAcceso_Movimientos ADD Estatus VARCHAR(15)
-END
-GO
-
-IF EXISTS(SELECT so.[object_id] FROM sys.objects so JOIN sys.[columns] sc ON so.[object_id] = sc.[object_id]
-          WHERE so.[object_id] = OBJECT_ID('dbo.MobileAcceso_Movimientos', 'U') AND sc.name = 'Estatus')
-BEGIN
-  UPDATE a
-     SET a.Estatus = c.Estatus
-    FROM MobileAcceso_Movimientos   a
-    JOIN Cte                        c   ON a.Cte = c.Cliente
-   WHERE a.Estatus IS NULL
-
-  ALTER TABLE dbo.MobileAcceso_Movimientos ALTER COLUMN Estatus VARCHAR(15)
-END
-GO
 /*
 * Índices
 */
@@ -176,23 +140,23 @@ IF NOT EXISTS (SELECT * FROM TablaSt WHERE TablaSt = 'wControlAcceso')
 GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wRutaFotos')
   INSERT TablaStD VALUES ('wControlAcceso', 'wRutaFotos',
-  /*Ruta local del site donde se almacenan las imagenes*/'C:\inetpub\wwwroot\CGP\pruebas\Img\')
+  /*Ruta local del site donde se almacenan las imagenes*/'C:\inetpub\wwwroot\CGP\Img\')
 GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wExtFotos')
   INSERT TablaStD VALUES ('wControlAcceso', 'wExtFotos', '.bmp')-- extensión de las imágenes que se utilizarán
 GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wMaxInvitados')
-  INSERT TablaStD VALUES ('wControlAcceso', 'wMaxInvitados', '3')
+  INSERT TablaStD VALUES ('wControlAcceso', 'wMaxInvitados', '2') -- número máximo de visitas que puede tener un invitado
 GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wEmpresa')
-  INSERT TablaStD VALUES ('wControlAcceso', 'wEmpresa', 'CGP')
+  INSERT TablaStD VALUES ('wControlAcceso', 'wEmpresa', 'CGP') -- empresa que puede utilizar el control de accesos
   GO
 IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wPuerta')
-  INSERT TablaStD VALUES ('wControlAcceso', 'wPuerta', '1')
+  INSERT TablaStD VALUES ('wControlAcceso', 'wPuerta', '1') -- número de puertas que pueden utilizar el control de accesos
 GO
-IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wPasswordType')
-  INSERT TablaStD VALUES ('wControlAcceso', 'wPasswordType', '1' /*'2'*/)
-  /*2 = nuevo, 1 = viejo (la compatibilidad 80 no es necesaria) */
+IF NOT EXISTS (SELECT * FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wTipo_dePassword')
+  INSERT TablaStD VALUES ('wControlAcceso', 'wTipo_dePassword', '1' /*'2'*/) -- Tipo de encriptación de contraseña
+  /*2 = nuevo, 1 = viejo */
 GO
 IF NOT EXISTS (SELECT * FROM GrupoTrabajo WHERE GrupoTrabajo = 'Control Accesos')
   INSERT GrupoTrabajo (GrupoTrabajo) VALUES ('Control Accesos')
@@ -240,7 +204,9 @@ AS BEGIN
   DECLARE
     @pwdType    INT
 
-  SELECT @pwdType = Valor FROM TablaStD WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wPasswordType'
+  SELECT @pwdType = Valor
+    FROM TablaStD
+   WHERE TablaSt = 'wControlAcceso' AND Nombre = 'wTipo_dePassword'
   -- si este procedimiento regresa renglones el acceso sera denegado al sistema de accesos del club de golf
   SELECT TOP 1 u.Usuario    AS Usuario,
          @Pass              AS Pass
